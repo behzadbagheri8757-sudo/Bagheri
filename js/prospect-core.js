@@ -258,6 +258,16 @@ async function convertProspectToCustomer(shopId){
       if(typeof saveData==='function') await saveData();
       return { customerId: already.id, created: false, customer: already };
     }
+    // FIX (independent audit): `dup` above was computed but never used, so a
+    // customer with the exact same active name could be created a second
+    // time. Reuse the existing customer instead of creating a duplicate —
+    // no merge, no id change, no touching of its balance/history/invoices.
+    if(dup){
+      shop.linkedCustomerId = dup.id;
+      shop.status = 'converted';
+      await persistProspectShop(shop);
+      return { customerId: dup.id, created: false, customer: dup };
+    }
   }
 
   const region = prospectRouteName(shop.routeId);
@@ -295,6 +305,24 @@ async function convertProspectToCustomer(shopId){
 
 async function bootProspectPage(activeNavId, afterLoad){
   try{
+    /* PIN gate (minimal): unlock before any CRM/prospect render. Does not touch data/FIFO. */
+    try{
+      var pinConfigured = false;
+      try{ pinConfigured = !!(localStorage.getItem('baqeri_pin_lock_v1')); }catch(_e){}
+      if(pinConfigured){
+        if(!window.pinLock || typeof window.pinLock.ensureUnlocked !== 'function'){
+          document.body.innerHTML = '<div style="padding:24px;text-align:center;font-family:sans-serif;direction:rtl;">قفل PIN فعال است اما ماژول قفل بارگذاری نشد. صفحه را دوباره باز کنید.</div>';
+          return;
+        }
+        await window.pinLock.ensureUnlocked();
+      } else if(window.pinLock && typeof window.pinLock.ensureUnlocked === 'function'){
+        await window.pinLock.ensureUnlocked();
+      }
+    }catch(pinErr){
+      console.error('pin lock gate failed', pinErr);
+      document.body.innerHTML = '<div style="padding:24px;text-align:center;font-family:sans-serif;direction:rtl;">خطا در قفل PIN. صفحه را دوباره باز کنید.</div>';
+      return;
+    }
     if(typeof loadData==='function') await loadData();
     if(typeof renderSharedNav==='function') renderSharedNav(activeNavId);
     if(typeof renderBottomNav==='function') renderBottomNav(activeNavId);

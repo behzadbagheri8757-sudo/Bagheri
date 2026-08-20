@@ -134,9 +134,17 @@ async function exportBackupJSON(){
 }
 
 function validateBackupShape(parsed){
-  if(!parsed || typeof parsed !== 'object') return false;
+  if(!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
   const arrays = ['products','customers','invoices','payments','checks','suppliers'];
-  return arrays.every(k => parsed[k]===undefined || Array.isArray(parsed[k]));
+  // FIX (independent audit, round 2): require ALL six known arrays to be
+  // present — not just "at least one" (previous FIX 2) or "undefined is ok"
+  // (original code). Every real backup produced by this app — old or new —
+  // always includes all six as arrays (even empty ones), because emptyData()
+  // and normalizeData() always populate them before export. So a real backup
+  // still passes, while a JSON missing a whole section (e.g. no "invoices"
+  // key at all) is now correctly rejected instead of silently wiping that
+  // section to [] on restore.
+  return arrays.every(k => Array.isArray(parsed[k]));
 }
 
 async function importBackupJSON(file){
@@ -155,8 +163,16 @@ async function importBackupJSON(file){
       if(pSnap) await dbPut(PRERESTORE_PROSPECT_KEY, JSON.stringify(pSnap));
     }catch(e){ console.error('prospect pre-restore snapshot failed', e); }
 
+    // FIX 4: keep the previous in-memory data so a failed save doesn't leave
+    // the app running on an unsaved/half-applied dataset.
+    const previousData = data;
     data = normalizeData(parsed);
-    await saveData();
+    try{
+      await saveData();
+    }catch(saveErr){
+      data = previousData;
+      throw saveErr;
+    }
     // فقط اگر بکاپ جدید شامل prospectScout باشد جایگزین می‌شود؛ بکاپ قدیمی Prospect فعلی را دست نمی‌زند
     if(parsed.prospectScout){
       await restoreProspectScoutBundle(parsed.prospectScout);
@@ -173,8 +189,20 @@ async function undoLastRestore(){
   try{
     const snap = await dbGet(PRERESTORE_KEY);
     if(!snap || !snap.value){ showToast('نسخه‌ی قبل از بازیابی موجود نیست'); return; }
+    // FIX 4: keep the previous in-memory data so a failed save doesn't leave
+    // the app running on an unsaved/half-applied dataset.
+    const previousData = data;
     data = normalizeData(JSON.parse(snap.value));
-    await saveData();
+    try{
+      await saveData();
+    }catch(saveErr){
+      data = previousData;
+      throw saveErr;
+    }
+    // FIX 3: the snapshot has now been successfully consumed — invalidate it so
+    // it can't remain permanently reusable / silently reapplied months later.
+    // Only removed AFTER a successful save (a failed save keeps it for recovery).
+    try{ await dbDelete(PRERESTORE_KEY); }catch(e){ console.error('pre-restore snapshot cleanup failed', e); }
     try{
       const pSnap = await dbGet(PRERESTORE_PROSPECT_KEY);
       if(pSnap && pSnap.value){
@@ -217,8 +245,16 @@ async function restoreFromAutoBackup(key){
     if(!snap || !snap.value){ showToast('این نسخه‌ی بکاپ پیدا نشد'); return; }
     // مثل بازیابی از فایل: قبل از جایگزینی، وضعیت فعلی هم نگه داشته می‌شود
     await dbPut(PRERESTORE_KEY, JSON.stringify(data));
+    // FIX 4: keep the previous in-memory data so a failed save doesn't leave
+    // the app running on an unsaved/half-applied dataset.
+    const previousData = data;
     data = normalizeData(JSON.parse(snap.value));
-    await saveData();
+    try{
+      await saveData();
+    }catch(saveErr){
+      data = previousData;
+      throw saveErr;
+    }
     render();
     showToast('از بکاپ خودکار بازیابی شد');
   }catch(e){
@@ -257,9 +293,10 @@ function exportExcel(){
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(invRows.length?invRows:[{'شماره فاکتور':''}]), 'فاکتورها');
 
   const prodRows = data.products.map(p=>({
-    'نام کالا': p.name, 'دسته‌بندی': p.category||'', 'قیمت خرید': p.buy,
+    'نام کالا': p.name, 'دسته‌بندی': p.category||'', 'قیمت خرید (FIFO)': Math.round(productFifoUnitCost(p.id)),
+    'قیمت خرید (مبنای پیش‌فرض)': p.buy,
     'قیمت عمده': p.wholesale, 'قیمت مصرف‌کننده': p.retail, 'موجودی': p.stockQty,
-    'ارزش ریالی موجودی': (p.stockQty||0)*(p.buy||0),
+    'ارزش ریالی موجودی (FIFO)': Math.round(productInventoryValue(p.id)),
   }));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(prodRows.length?prodRows:[{'نام کالا':''}]), 'کالاها');
 

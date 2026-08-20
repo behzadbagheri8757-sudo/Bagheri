@@ -101,6 +101,55 @@ function isMoreSectionActive(activeId){
   return MORE_NAV_ITEMS.some(t => t.id === activeId);
 }
 
+
+/**
+ * Keep #bottom-nav pinned to the visible bottom of the screen.
+ * On mobile browsers the visual viewport moves when the URL bar shows/hides;
+ * position:fixed alone then appears to float mid-page. Adjust `bottom` by the
+ * gap between layout viewport bottom and visual viewport bottom.
+ * Presentation only — does not touch CRM data or navigation destinations.
+ */
+function pinBottomNav(){
+  const el = document.getElementById('bottom-nav');
+  if(!el) return;
+  try{
+    if(window.visualViewport){
+      const vv = window.visualViewport;
+      const gap = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      el.style.setProperty('bottom', gap + 'px', 'important');
+    }else{
+      el.style.setProperty('bottom', '0px', 'important');
+    }
+  }catch(e){
+    /* ignore — bar still uses CSS bottom:0 */
+  }
+}
+
+function ensureBottomNavPinned(){
+  if(ensureBottomNavPinned._bound) return;
+  ensureBottomNavPinned._bound = true;
+  let ticking = false;
+  function schedule(){
+    if(ticking) return;
+    ticking = true;
+    requestAnimationFrame(function(){
+      ticking = false;
+      pinBottomNav();
+    });
+  }
+  window.addEventListener('resize', schedule, {passive:true});
+  window.addEventListener('scroll', schedule, {passive:true});
+  if(window.visualViewport){
+    window.visualViewport.addEventListener('resize', schedule, {passive:true});
+    window.visualViewport.addEventListener('scroll', schedule, {passive:true});
+  }
+  // orientation / pageshow after bfcache
+  window.addEventListener('pageshow', schedule, {passive:true});
+  window.addEventListener('orientationchange', function(){
+    setTimeout(schedule, 50);
+  }, {passive:true});
+}
+
 function renderBottomNav(activeId){
   ensureBottomNavDOM();
   const bar = document.getElementById('bottom-nav');
@@ -139,6 +188,9 @@ function renderBottomNav(activeId){
       return `<a class="more-sheet-item${active}" href="${t.href}">${t.label}</a>`;
     }).join('');
   }
+
+  ensureBottomNavPinned();
+  pinBottomNav();
 }
 
 function openMoreSheet(activeId){
@@ -242,6 +294,24 @@ function getQueryParam(name){
 /** Load IndexedDB data, draw shared + bottom nav, then run page callback. */
 async function bootPage(activeId, afterLoad){
   try{
+    /* PIN gate (minimal): unlock before any CRM render. Does not touch data/FIFO. */
+    try{
+      var pinConfigured = false;
+      try{ pinConfigured = !!(localStorage.getItem('baqeri_pin_lock_v1')); }catch(_e){}
+      if(pinConfigured){
+        if(!window.pinLock || typeof window.pinLock.ensureUnlocked !== 'function'){
+          document.body.innerHTML = '<div style="padding:24px;text-align:center;font-family:sans-serif;direction:rtl;">قفل PIN فعال است اما ماژول قفل بارگذاری نشد. صفحه را دوباره باز کنید.</div>';
+          return;
+        }
+        await window.pinLock.ensureUnlocked();
+      } else if(window.pinLock && typeof window.pinLock.ensureUnlocked === 'function'){
+        await window.pinLock.ensureUnlocked();
+      }
+    }catch(pinErr){
+      console.error('pin lock gate failed', pinErr);
+      document.body.innerHTML = '<div style="padding:24px;text-align:center;font-family:sans-serif;direction:rtl;">خطا در قفل PIN. صفحه را دوباره باز کنید.</div>';
+      return;
+    }
     await loadData();
     renderSharedNav(activeId);
     renderBottomNav(activeId);

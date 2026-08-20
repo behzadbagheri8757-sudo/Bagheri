@@ -12,10 +12,8 @@
 <meta name="apple-mobile-web-app-title" content="باقری">
 <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
 <title>تامین‌کنندگان — حبوبات و خشکبار باقری</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="./vendor/xlsx.full.min.js"></script>
+<script src="./vendor/html2canvas.min.js"></script>
 <link rel="stylesheet" href="./css/app.css">
 </head>
 <body data-page="suppliers">
@@ -37,6 +35,7 @@
 <script src="./js/stock.js"></script>
 <script src="./js/payments.js"></script>
 <script src="./js/backup.js"></script>
+<script src="./js/pin-lock.js"></script>
 <script src="./js/nav.js"></script>
 <script src="./js/app.js"></script>
 <script>
@@ -140,7 +139,7 @@ function renderSupplierListOnly(){
       const amt = t.balance === 0 ? word : (word + ': ' + toman(Math.abs(t.balance)) + ' ت');
       const sub = [s.phone, purchaseCount ? (purchaseCount + ' خرید') : ''].filter(Boolean).join(' — ');
       return `<a class="ledger-row" href="./supplier.html?id=${encodeURIComponent(s.id)}" style="text-decoration:none;color:inherit;">
-        <span class="name">${esc(s.name)}${sub?`<span class="sub">${esc(sub)}</span>`:''}</span>
+        <span class="name">${esc(s.name)}${s.active===false?' <span class="badge pending">غیرفعال</span>':''}${sub?`<span class="sub">${esc(sub)}</span>`:''}</span>
         <span class="filler"></span>
         <span class="amount ${color}">${amt}</span>
       </a>`;
@@ -157,5 +156,6 @@ bootPage('suppliers', function(){
   drawSuppliersPage();
 });
 </script>
+<script src="./js/sw-register.js"></script>
 </body>
 </html>

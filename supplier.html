@@ -12,10 +12,8 @@
 <meta name="apple-mobile-web-app-title" content="باقری">
 <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
 <title>تامین‌کننده — حبوبات و خشکبار باقری</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="./vendor/xlsx.full.min.js"></script>
+<script src="./vendor/html2canvas.min.js"></script>
 <link rel="stylesheet" href="./css/app.css">
 </head>
 <body data-page="supplier">
@@ -37,6 +35,7 @@
 <script src="./js/stock.js"></script>
 <script src="./js/payments.js"></script>
 <script src="./js/backup.js"></script>
+<script src="./js/pin-lock.js"></script>
 <script src="./js/nav.js"></script>
 <script src="./js/app.js"></script>
 <script>
@@ -117,7 +116,7 @@ function drawSupplierPage(){
     </div>
 
     <div class="card" style="margin-bottom:12px;">
-      <div style="font-size:1.15rem;font-weight:800;color:var(--olive-dark);margin-bottom:8px;">${esc(s.name)}</div>
+      <div style="font-size:1.15rem;font-weight:800;color:var(--olive-dark);margin-bottom:8px;">${esc(s.name)}${s.active===false?' <span class="badge pending">غیرفعال</span>':''}</div>
       <div style="font-size:.88rem;line-height:1.85;">
         ${s.phone ? '<div>تلفن: '+esc(s.phone)+'</div>' : ''}
       </div>
@@ -169,5 +168,6 @@ bootPage('suppliers', function(){
   drawSupplierPage();
 });
 </script>
+<script src="./js/sw-register.js"></script>
 </body>
 </html>

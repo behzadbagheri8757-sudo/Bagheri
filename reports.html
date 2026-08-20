@@ -12,10 +12,8 @@
 <meta name="apple-mobile-web-app-title" content="باقری">
 <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
 <title>گزارش‌ها — حبوبات و خشکبار باقری</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="./vendor/xlsx.full.min.js"></script>
+<script src="./vendor/html2canvas.min.js"></script>
 <link rel="stylesheet" href="./css/app.css">
 <style>
 .report-section{margin-bottom:22px;}
@@ -43,12 +41,44 @@
 <script src="./js/stock.js"></script>
 <script src="./js/payments.js"></script>
 <script src="./js/backup.js"></script>
+<script src="./js/pin-lock.js"></script>
 <script src="./js/nav.js"></script>
 <script src="./js/app.js"></script>
 <script>
 /* Phase 10 — reports page. Read-only use of calc.js helpers. No finance logic changes. */
 
 let reportPeriod = 'all'; // today | week | month | all
+
+/* Accordion open/closed state for report sections below "پرفروش‌ترین کالاها".
+   Sections above (خلاصه فروش, سود, پرفروش‌ترین کالاها) are never collapsible. */
+let reportAccordionState = { customers:false, suppliers:false, inventory:false, invoices:false };
+
+function toggleReportAccordion(key){
+  if(!(key in reportAccordionState)) return;
+  reportAccordionState[key] = !reportAccordionState[key];
+  const header = document.querySelector(`.report-accordion-header[data-racc-toggle="${key}"]`);
+  const content = document.getElementById(`racc-${key}`);
+  if(header){
+    header.classList.toggle('is-open', reportAccordionState[key]);
+    header.setAttribute('aria-expanded', reportAccordionState[key] ? 'true' : 'false');
+  }
+  if(content){ content.hidden = !reportAccordionState[key]; }
+}
+
+/** Wrap section content in a collapsible accordion header/content pair (Reports-only presentation). */
+function reportAccordionSection(key, titleHtml, innerHtml){
+  const isOpen = !!reportAccordionState[key];
+  return `
+    <div class="report-section report-accordion">
+      <button type="button" class="report-accordion-header ${isOpen?'is-open':''}" data-racc-toggle="${key}" aria-expanded="${isOpen?'true':'false'}" aria-controls="racc-${key}">
+        <h3>${titleHtml}</h3>
+        <span class="report-accordion-chevron" aria-hidden="true"></span>
+      </button>
+      <div class="report-accordion-content" id="racc-${key}" ${isOpen ? '' : 'hidden'}>
+        ${innerHtml}
+      </div>
+    </div>`;
+}
 
 function startOfWeek(ref){
   const d = new Date(ref);
@@ -113,6 +143,13 @@ function drawReportsPage(){
         renderReportsBodyOnly();
       });
     });
+    // Delegated listener on the persistent #reports-body container: survives
+    // the innerHTML re-renders triggered by period-chip clicks / toggles.
+    document.getElementById('reports-body').addEventListener('click', function(e){
+      const btn = e.target.closest('[data-racc-toggle]');
+      if(!btn) return;
+      toggleReportAccordion(btn.getAttribute('data-racc-toggle'));
+    });
   }
   renderReportsBodyOnly();
 }
@@ -165,6 +202,11 @@ function renderReportsBodyOnly(){
   const zero = products.filter(p => (p.stockQty||0) === 0);
   const negative = products.filter(p => (p.stockQty||0) < 0);
 
+  // top-selling products (read-only, existing calc.js helper — no new sales math)
+  const topSellingProducts = topProducts(8);
+  // Same helper, just re-sorted by revenue instead of qty — no new pricing/amount logic.
+  const topByValue = topProducts(9999).slice().sort((a,b)=>b.revenue-a.revenue).slice(0, 5);
+
   const periodLabel = {today:'امروز', week:'این هفته', month:'این ماه', all:'همه زمان‌ها'}[reportPeriod];
 
   body.innerHTML = `
@@ -194,8 +236,42 @@ function renderReportsBodyOnly(){
       </div>
     </div>
 
-    <div class="report-section">
-      <h3>مشتریان</h3>
+    <div class="report-section report-top-products">
+      <h3>پرفروش‌ترین کالاها</h3>
+      ${topSellingProducts.length ? `
+        <div class="rtp-list">
+          ${topSellingProducts.map((p, idx)=>`
+            <div class="rtp-row">
+              <span class="rtp-rank">${idx+1}</span>
+              <span class="rtp-info">
+                <span class="rtp-name">${esc(p.name)}</span>
+                <span class="rtp-qty">تعداد فروش: ${p.qty}${p.qtyUnit==='kg' ? ' کیلوگرم' : ''}</span>
+              </span>
+              <span class="rtp-amount">${toman(p.revenue)} ت</span>
+            </div>`).join('')}
+        </div>
+      ` : '<div class="empty" style="padding:8px 0;">فروشی ثبت نشده</div>'}
+    </div>
+
+    <div class="report-section report-top-products">
+      <h3>پرفروش‌ترین کالاها بر اساس ارزش فروش</h3>
+      ${topByValue.length ? `
+        <div class="rtp-list">
+          ${topByValue.map((p, idx)=>`
+            <div class="rtp-row">
+              <span class="rtp-rank">${idx+1}</span>
+              <span class="rtp-info">
+                <span class="rtp-name">${esc(p.name)}</span>
+                <span class="rtp-qty">تعداد فروش: ${p.qty}${p.qtyUnit==='kg' ? ' کیلوگرم' : ''}</span>
+              </span>
+              <span class="rtp-amount">${toman(p.revenue)} ت</span>
+            </div>`).join('')}
+        </div>
+        <div class="report-note">بر اساس مجموع مبلغ واقعی فروش هر کالا (qty × قیمت − تخفیف ردیف)؛ فقط ترتیب نمایش متفاوت است، منطق مبلغ همان منطق فعلی سیستم است.</div>
+      ` : '<div class="empty" style="padding:8px 0;">فروشی ثبت نشده</div>'}
+    </div>
+
+    ${reportAccordionSection('customers', 'مشتریان', `
       <div class="cards">
         <div class="card"><div class="label">تعداد کل</div><div class="value">${customers.length}</div></div>
         <div class="card"><div class="label">بدهکار</div><div class="value accent-rust">${debtors}</div></div>
@@ -215,10 +291,9 @@ function renderReportsBodyOnly(){
             <span class="amount accent-rust">${toman(t.balance)} ت</span>
           </a>`).join('')}
       ` : '<div class="empty" style="padding:8px 0;">بدهکاری ثبت نشده</div>'}
-    </div>
+    `)}
 
-    <div class="report-section">
-      <h3>تأمین‌کنندگان</h3>
+    ${reportAccordionSection('suppliers', 'تأمین‌کنندگان', `
       <div class="cards">
         <div class="card"><div class="label">تعداد</div><div class="value">${suppliers.length}</div></div>
         <div class="card"><div class="label">دارای بدهی</div><div class="value">${supWithDebt}</div></div>
@@ -231,10 +306,9 @@ function renderReportsBodyOnly(){
           <span class="filler"></span>
           <span class="amount accent-rust">${toman(t.balance)} ت</span>
         </a>`).join('') : '<div class="empty" style="padding:8px 0;">بدهی تأمین‌کننده نیست</div>'}
-    </div>
+    `)}
 
-    <div class="report-section">
-      <h3>انبار</h3>
+    ${reportAccordionSection('inventory', 'انبار', `
       <div class="cards">
         <div class="card"><div class="label">تعداد کالا</div><div class="value">${products.length}</div></div>
         <div class="card wide"><div class="label">ارزش موجودی (qty × buy)</div>
@@ -267,10 +341,9 @@ function renderReportsBodyOnly(){
         <a class="btn small secondary" href="./inventory.html">رفتن به انبار</a>
         <a class="btn small secondary" href="./products.html">لیست کالاها</a>
       </div>
-    </div>
+    `)}
 
-    <div class="report-section">
-      <h3>فاکتورها — ${esc(periodLabel)}</h3>
+    ${reportAccordionSection('invoices', `فاکتورها — ${esc(periodLabel)}`, `
       <div class="cards">
         <div class="card"><div class="label">تعداد در دوره</div><div class="value">${periodCount}</div></div>
         <div class="card"><div class="label">پرداخت‌شده / بدون مانده</div><div class="value accent-olive">${paidCount}</div></div>
@@ -281,7 +354,7 @@ function renderReportsBodyOnly(){
       <div class="btn-row" style="margin-top:10px;">
         <a class="btn small secondary" href="./invoices.html">همه فاکتورها</a>
       </div>
-    </div>
+    `)}
   `;
 }
 
@@ -289,5 +362,6 @@ bootPage('reports', function(){
   drawReportsPage();
 });
 </script>
+<script src="./js/sw-register.js"></script>
 </body>
 </html>

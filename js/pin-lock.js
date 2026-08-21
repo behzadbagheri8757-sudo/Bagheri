@@ -163,8 +163,8 @@
       '#pin-lock-overlay[hidden]{display:none !important;}' +
       '#pin-lock-overlay .pin-box{width:100%;max-width:360px;background:#fff;border-radius:24px;padding:36px 24px 28px;' +
         'box-shadow:0 20px 56px rgba(0,0,0,.32);text-align:center;}' +
-      '#pin-lock-overlay .pin-lock-icon{width:56px;height:56px;margin:0 auto 18px;border-radius:16px;background:#E7F6F0;' +
-        'display:flex;align-items:center;justify-content:center;color:#20A879;font-size:1.55rem;}' +
+      '#pin-lock-overlay .pin-lock-icon{width:72px;height:72px;margin:0 auto 20px;border-radius:20px;background:#E7F6F0;' +
+        'display:flex;align-items:center;justify-content:center;color:#20A879;}' +
       '#pin-lock-overlay .pin-title{font-size:1.25rem;font-weight:800;color:#0B1F3A;margin:0 0 8px;letter-spacing:-0.02em;}' +
       '#pin-lock-overlay .pin-sub{font-size:.85rem;color:#6A7383;margin:0 0 28px;line-height:1.55;}' +
       '#pin-lock-overlay .pin-cells-wrap{position:relative;margin:0 auto 8px;max-width:320px;outline:none !important;}' +
@@ -223,7 +223,7 @@
     overlayEl.innerHTML =
       '<div class="pin-box" id="pin-lock-card" dir="rtl">' +
         '<div class="pin-lock-icon" aria-hidden="true">' +
-          '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+          '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">' +
             '<rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" stroke-width="2"/>' +
             '<path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' +
             '<circle cx="12" cy="16" r="1.5" fill="currentColor"/>' +

@@ -150,46 +150,50 @@
   }
 
   function ensureOverlayCss() {
-    if (document.getElementById('pin-lock-style')) return;
-    var st = document.createElement('style');
-    st.id = 'pin-lock-style';
+    var st = document.getElementById('pin-lock-style');
+    if (!st) {
+      st = document.createElement('style');
+      st.id = 'pin-lock-style';
+      document.head.appendChild(st);
+    }
+    /* Always refresh CSS so SW/cache of old JS does not leave stale look */
     st.textContent =
-      '#pin-lock-overlay{position:fixed;inset:0;z-index:99999;background:#0B1F3A;display:flex;align-items:center;justify-content:center;padding:20px;' +
+      '#pin-lock-overlay{position:fixed;inset:0;z-index:99999;background:#0B1F3A;display:flex;align-items:center;justify-content:center;padding:24px 18px;' +
         'font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Tahoma,sans-serif;-webkit-font-smoothing:antialiased;}' +
       '#pin-lock-overlay[hidden]{display:none !important;}' +
-      '#pin-lock-overlay .pin-box{width:100%;max-width:360px;background:#fff;border-radius:24px;padding:32px 22px 24px;' +
-        'box-shadow:0 16px 48px rgba(0,0,0,.28);text-align:center;}' +
-      '#pin-lock-overlay .pin-lock-icon{width:48px;height:48px;margin:0 auto 16px;border-radius:14px;background:#E7F6F0;' +
-        'display:flex;align-items:center;justify-content:center;color:#20A879;font-size:1.35rem;}' +
-      '#pin-lock-overlay .pin-title{font-size:1.15rem;font-weight:800;color:#0B1F3A;margin:0 0 6px;letter-spacing:-0.01em;}' +
-      '#pin-lock-overlay .pin-sub{font-size:.8rem;color:#6A7383;margin:0 0 22px;line-height:1.55;}' +
-      '#pin-lock-overlay .pin-cells-wrap{position:relative;margin:0 auto 4px;max-width:300px;outline:none !important;}' +
-      '#pin-lock-overlay .pin-cells{display:flex;gap:10px;justify-content:center;direction:ltr;}' +
-      '#pin-lock-overlay .pin-cell{width:44px;height:52px;border-radius:14px;border:1.5px solid #E2E7EE;background:#F7F9FC;' +
-        'display:flex;align-items:center;justify-content:center;font-size:1.3rem;font-weight:700;color:#0B1F3A;' +
+      '#pin-lock-overlay .pin-box{width:100%;max-width:360px;background:#fff;border-radius:24px;padding:36px 24px 28px;' +
+        'box-shadow:0 20px 56px rgba(0,0,0,.32);text-align:center;}' +
+      '#pin-lock-overlay .pin-lock-icon{width:56px;height:56px;margin:0 auto 18px;border-radius:16px;background:#E7F6F0;' +
+        'display:flex;align-items:center;justify-content:center;color:#20A879;font-size:1.55rem;}' +
+      '#pin-lock-overlay .pin-title{font-size:1.25rem;font-weight:800;color:#0B1F3A;margin:0 0 8px;letter-spacing:-0.02em;}' +
+      '#pin-lock-overlay .pin-sub{font-size:.85rem;color:#6A7383;margin:0 0 28px;line-height:1.55;}' +
+      '#pin-lock-overlay .pin-cells-wrap{position:relative;margin:0 auto 8px;max-width:320px;outline:none !important;}' +
+      '#pin-lock-overlay .pin-cells{display:flex;gap:12px;justify-content:center;direction:ltr;}' +
+      '#pin-lock-overlay .pin-cell{width:46px;height:56px;border-radius:14px;border:2px solid #E2E7EE;background:#F7F9FC;' +
+        'display:flex;align-items:center;justify-content:center;font-size:1.35rem;font-weight:700;color:#0B1F3A;' +
         'transition:border-color .15s ease, background .15s ease, box-shadow .15s ease, transform .12s ease;' +
-        '-webkit-tap-highlight-color:transparent;outline:none;}' +
-      '#pin-lock-overlay .pin-cell.filled{border-color:#C5E8DA;background:#F0FAF6;}' +
-      '#pin-lock-overlay .pin-cell.active{border-color:#20A879;background:#fff;box-shadow:0 0 0 3px #E7F6F0;transform:scale(1.06);}' +
-      '#pin-lock-overlay .pin-cell .dot{width:11px;height:11px;border-radius:50%;background:#0B1F3A;display:inline-block;}' +
+        '-webkit-tap-highlight-color:transparent;outline:none;box-shadow:none;}' +
+      '#pin-lock-overlay .pin-cell.filled{border-color:#A8DCC8;background:#F0FAF6;}' +
+      '#pin-lock-overlay .pin-cell.active{border-color:#20A879;background:#fff;box-shadow:0 0 0 4px rgba(32,168,121,.18);transform:scale(1.05);}' +
+      '#pin-lock-overlay .pin-cell .dot{width:12px;height:12px;border-radius:50%;background:#0B1F3A;display:inline-block;}' +
       '#pin-lock-overlay .pin-cell .digit{opacity:1;transition:opacity .2s ease;}' +
-      /* Kill iOS/Safari blue focus ring on the invisible input — keep focus for keyboard */
       '#pin-lock-overlay .pin-input-real{position:absolute;inset:0;width:100%;height:100%;opacity:0.01;border:0;background:transparent;' +
         'color:transparent;caret-color:transparent;font-size:16px;z-index:2;' +
         'outline:none !important;box-shadow:none !important;-webkit-appearance:none;appearance:none;' +
         '-webkit-tap-highlight-color:transparent;}' +
-      '#pin-lock-overlay .pin-input-real:focus{outline:none !important;box-shadow:none !important;}' +
-      '#pin-lock-overlay .pin-err{color:#E04545;font-size:.8rem;font-weight:700;min-height:1.25em;margin:14px 0 0;}' +
-      /* Secondary action: auto-submit is primary; button remains as accessible fallback */
-      '#pin-lock-overlay .pin-btn{width:100%;margin-top:16px;padding:14px;border:none;border-radius:14px;background:#20A879;color:#fff;' +
-        'font-weight:800;font-size:.95rem;font-family:inherit;min-height:50px;cursor:pointer;' +
-        'transition:opacity .15s ease, background .15s ease, transform .1s ease;}' +
-      '#pin-lock-overlay .pin-btn:disabled{opacity:.35;cursor:not-allowed;background:#9AA3B2;}' +
+      '#pin-lock-overlay .pin-input-real:focus{outline:none !important;box-shadow:none !important;border:0 !important;}' +
+      '#pin-lock-overlay .pin-err{color:#E04545;font-size:.85rem;font-weight:700;min-height:1.3em;margin:16px 0 0;}' +
+      /* Primary path is auto-submit; button is quiet secondary fallback */
+      '#pin-lock-overlay .pin-btn{width:auto;min-width:120px;margin:20px auto 0;padding:10px 28px;border:none;border-radius:12px;' +
+        'background:transparent;color:#20A879;font-weight:700;font-size:.9rem;font-family:inherit;min-height:44px;cursor:pointer;' +
+        'transition:opacity .15s ease, background .15s ease, color .15s ease;}' +
+      '#pin-lock-overlay .pin-btn:disabled{opacity:.35;cursor:not-allowed;color:#9AA3B2;background:transparent;}' +
+      '#pin-lock-overlay .pin-btn:not(:disabled){background:#20A879;color:#fff;}' +
       '#pin-lock-overlay .pin-btn:not(:disabled):active{transform:scale(0.98);}' +
+      '#pin-lock-overlay .pin-hint{font-size:.72rem;color:#9AA3B2;margin:10px 0 0;line-height:1.4;}' +
       '#pin-lock-overlay .pin-box.shake{animation:pinShake .4s ease;}' +
       '@keyframes pinShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}' +
       '#pin-lock-overlay .pin-cover-only{color:#fff;font-size:1rem;font-weight:700;text-align:center;opacity:.9;}';
-    document.head.appendChild(st);
   }
 
   function showCoverOnly() {
@@ -228,6 +232,7 @@
         '</div>' +
         '<div class="pin-err" id="pin-lock-err"></div>' +
         '<button type="button" class="pin-btn" id="pin-lock-submit" disabled>ورود</button>' +
+        '<div class="pin-hint">پس از وارد کردن ۶ رقم، به‌صورت خودکار وارد می‌شوید</div>' +
       '</div>';
 
     var input = document.getElementById('pin-lock-input');

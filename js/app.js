@@ -1103,16 +1103,18 @@ function openAddTransaction(cid){
         if(returnInvoiceId) payment.invoiceId = returnInvoiceId;
         // اسنپ‌شات کامل قبل از هر mutation — همان الگوی ثبت/ویرایش فاکتور —
         // چون این مسیر هم برای «برگشت از فروش» موجودی/لایه‌های FIFO را تغییر می‌دهد.
+        // یک try واحد: اگر applyReturnStockEffects یا saveData شکست بخورد،
+        // data دقیقاً به حالت قبل از push برمی‌گردد (جلوگیری از payment یتیم بدون لایه).
         const previousData = JSON.parse(JSON.stringify(data));
-        data.payments.push(payment);
-        if(method==='return' && returnItems.length){
-          applyReturnStockEffects(returnItems, date, payment);
-        }
         try{
+          data.payments.push(payment);
+          if(method==='return' && returnItems.length){
+            applyReturnStockEffects(returnItems, date, payment);
+          }
           await saveData();
-        }catch(saveErr){
+        }catch(err){
           data = previousData;
-          throw saveErr;
+          throw err;
         }
         openCustomerDetail(cid); render(); showToast('ثبت شد');
       });

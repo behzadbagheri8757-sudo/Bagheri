@@ -307,40 +307,156 @@ function deleteOrVoidPurchase(purchaseId){
   return { ok:true, mode:'hard-delete' };
 }
 
-// ---------- برگشت فروش = ورود کالا + orphan layer ----------
-function applyReturnStockEffects(returnItems, date, payment){
-  returnItems.forEach(ri=>{
-    const prod = data.products.find(p=>p.id===ri.productId);
-    if(prod){
-      prod.stockQty = (prod.stockQty||0) + (ri.qty||0);
-      prod.stockLog = prod.stockLog||[];
-      prod.stockLog.push({id:uid(), date, type:'return', qty:ri.qty||0, note:'برگشت از فروش', paymentId:payment.id});
+// ---------- برگشت فروش = ورود کالا + sale-return layer(s) از costAllocations فاکتور اصلی ----------
+/**
+ * Slice currentReturnQty from original FIFO costAllocations after skipping previousReturnedQty.
+ * Pure helper — no mutation. Allocations are consumed in stored order (FIFO at sale time).
+ * Returns { ok, slices:[{qty, unitCost}], shortfall }
+ */
+function sliceReturnAllocations(allocations, previousReturnedQty, currentReturnQty){
+  const slices = [];
+  let skip = Math.max(0, Number(previousReturnedQty)||0);
+  let need = Math.max(0, Number(currentReturnQty)||0);
+  if(!(need>0)) return { ok:true, slices, shortfall:0 };
+  const list = Array.isArray(allocations) ? allocations : [];
+  for(let i=0; i<list.length; i++){
+    const a = list[i];
+    let avail = Number(a.qty)||0;
+    if(!(avail>0)) continue;
+    if(skip>0){
+      const sk = Math.min(avail, skip);
+      skip -= sk;
+      avail -= sk;
     }
-    if(!(ri.qty>0) || !ri.productId) return;
-    let unitCost = (ri.unitCost!==undefined && ri.unitCost!==null) ? Number(ri.unitCost) : null;
-    if(unitCost===null || isNaN(unitCost)){
-      const sold = (data.invoices||[])
-        .filter(inv=>inv.customerId===payment.customerId)
-        .flatMap(inv=>(inv.items||[]).filter(it=>it.productId===ri.productId));
-      const last = sold.length ? sold[sold.length-1] : null;
-      if(last && last.costAllocations && last.costAllocations.length){
-        const tQty = last.costAllocations.reduce((s,a)=>s+(a.qty||0),0);
-        const tCost = last.costAllocations.reduce((s,a)=>s+(a.cost||0),0);
-        unitCost = tQty>0 ? tCost/tQty : (last.buyPrice||0);
-      } else if(last){
-        unitCost = last.buyPrice||0;
+    if(need>0 && avail>0){
+      const take = Math.min(avail, need);
+      const uc = Number(a.unitCost)||0;
+      // merge consecutive identical unitCost
+      const last = slices.length ? slices[slices.length-1] : null;
+      if(last && last.unitCost===uc){
+        last.qty += take;
       } else {
-        unitCost = prod ? (prod.buy||0) : 0;
+        slices.push({ qty: take, unitCost: uc });
       }
+      need -= take;
     }
-    createInventoryLayer({
-      purchaseId: null,
-      productId: ri.productId,
-      qty: ri.qty,
-      unitCost,
-      source: 'sale-return',
-      date,
-      note: 'برگشت از فروش',
+    if(need<=0) break;
+  }
+  // floating-point tolerance for fractional qty (e.g. 1 + 3.9 vs 4.9)
+  return { ok: need<=1e-9, slices, shortfall: Math.max(0, need) };
+}
+
+/**
+ * Previous returned qty for (invoiceId, productId), excluding the current payment
+ * (caller already pushed payment into data.payments before invoking this).
+ */
+function previousReturnedQtyForInvoiceProduct(invoiceId, productId, excludePaymentId){
+  let sum = 0;
+  (data.payments||[]).forEach(p=>{
+    if(p.method!=='return') return;
+    if(p.invoiceId!==invoiceId) return;
+    if(excludePaymentId && p.id===excludePaymentId) return;
+    (p.returnItems||[]).forEach(ri=>{
+      if(ri.productId===productId) sum += Number(ri.qty)||0;
+    });
+  });
+  return sum;
+}
+
+function applyReturnStockEffects(returnItems, date, payment){
+  // Phase 1 — pure planning / validation (no mutation). Fail closed before any stock change.
+  const plans = [];
+  (returnItems||[]).forEach(ri=>{
+    if(!(ri.qty>0) || !ri.productId) return;
+    const prod = data.products.find(p=>p.id===ri.productId);
+    const qty = Number(ri.qty)||0;
+
+    // Explicit override (rare; UI does not set it)
+    if(ri.unitCost!==undefined && ri.unitCost!==null && !isNaN(Number(ri.unitCost))){
+      plans.push({ productId: ri.productId, qty, slices: [{ qty, unitCost: Number(ri.unitCost) }] });
+      return;
+    }
+
+    if(payment && payment.invoiceId){
+      const inv = (data.invoices||[]).find(i=>i.id===payment.invoiceId);
+      if(!inv){
+        const err = new Error('فاکتور مرتبط با برگشت پیدا نشد. برگشت ثبت نشد تا هزینه اشتباه ساخته نشود.');
+        err.code = 'RETURN_INVOICE_MISSING';
+        throw err;
+      }
+      const items = (inv.items||[]).filter(it=>it.productId===ri.productId);
+      if(!items.length){
+        const name = prod ? (prod.name||ri.productId) : ri.productId;
+        const err = new Error('کالای «'+name+'» در فاکتور انتخاب‌شده وجود ندارد. برگشت ثبت نشد.');
+        err.code = 'RETURN_ITEM_MISSING';
+        throw err;
+      }
+      const soldQty = items.reduce((s,it)=>s+(Number(it.qty)||0), 0);
+      const prevRet = previousReturnedQtyForInvoiceProduct(inv.id, ri.productId, payment.id);
+      const remaining = soldQty - prevRet;
+      if(qty > remaining + 1e-9){
+        const name = prod ? (prod.name||ri.productId) : ri.productId;
+        const err = new Error('«'+name+'»: تعداد برگشتی بیشتر از مقدار قابل برگشت این فاکتور است (باقی‌مانده: '+remaining+').');
+        err.code = 'RETURN_QTY_EXCEEDED';
+        throw err;
+      }
+
+      // Prefer costAllocations (actual FIFO snapshot). Concatenate in item order.
+      const allocs = [];
+      items.forEach(it=>{
+        if(Array.isArray(it.costAllocations) && it.costAllocations.length){
+          it.costAllocations.forEach(a=>{
+            if((Number(a.qty)||0)>0) allocs.push(a);
+          });
+        }
+      });
+
+      if(allocs.length){
+        const sliced = sliceReturnAllocations(allocs, prevRet, qty);
+        if(!sliced.ok || !sliced.slices.length){
+          const err = new Error('امکان تخصیص هزینه FIFO برای برگشت وجود ندارد.');
+          err.code = 'RETURN_ALLOC_SHORTFALL';
+          throw err;
+        }
+        plans.push({ productId: ri.productId, qty, slices: sliced.slices });
+      } else {
+        // Legacy invoice without costAllocations — fallback buyPrice then product.buy
+        let unitCost = 0;
+        for(const it of items){
+          if(it.buyPrice!==undefined && it.buyPrice!==null && !isNaN(Number(it.buyPrice))){
+            unitCost = Number(it.buyPrice);
+            break;
+          }
+        }
+        if(!(unitCost>0) && prod) unitCost = Number(prod.buy)||0;
+        plans.push({ productId: ri.productId, qty, slices: [{ qty, unitCost }] });
+      }
+    } else {
+      // No invoiceId (account-only / defensive). Never guess from "last sale".
+      const unitCost = prod ? (Number(prod.buy)||0) : 0;
+      plans.push({ productId: ri.productId, qty, slices: [{ qty, unitCost }] });
+    }
+  });
+
+  // Phase 2 — mutate only after all items validated
+  plans.forEach(plan=>{
+    const prod = data.products.find(p=>p.id===plan.productId);
+    if(prod){
+      prod.stockQty = (prod.stockQty||0) + plan.qty;
+      prod.stockLog = prod.stockLog||[];
+      prod.stockLog.push({id:uid(), date, type:'return', qty:plan.qty, note:'برگشت از فروش', paymentId:payment && payment.id});
+    }
+    plan.slices.forEach(sl=>{
+      if(!(sl.qty>0)) return;
+      createInventoryLayer({
+        purchaseId: null,
+        productId: plan.productId,
+        qty: sl.qty,
+        unitCost: sl.unitCost,
+        source: 'sale-return',
+        date,
+        note: 'برگشت از فروش',
+      });
     });
   });
 }

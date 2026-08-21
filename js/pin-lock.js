@@ -190,7 +190,7 @@
       '#pin-lock-overlay .pin-btn:disabled{opacity:.35;cursor:not-allowed;color:#9AA3B2;background:transparent;}' +
       '#pin-lock-overlay .pin-btn:not(:disabled){background:#20A879;color:#fff;}' +
       '#pin-lock-overlay .pin-btn:not(:disabled):active{transform:scale(0.98);}' +
-      '#pin-lock-overlay .pin-hint{font-size:.72rem;color:#9AA3B2;margin:10px 0 0;line-height:1.4;}' +
+      '#pin-lock-overlay .pin-powered{font-size:.7rem;color:#A0A8B5;margin:18px 0 0;letter-spacing:.02em;font-weight:500;}' +
       '#pin-lock-overlay .pin-box.shake{animation:pinShake .4s ease;}' +
       '@keyframes pinShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}' +
       '#pin-lock-overlay .pin-cover-only{color:#fff;font-size:1rem;font-weight:700;text-align:center;opacity:.9;}';
@@ -222,7 +222,13 @@
     }
     overlayEl.innerHTML =
       '<div class="pin-box" id="pin-lock-card" dir="rtl">' +
-        '<div class="pin-lock-icon" aria-hidden="true">🔒</div>' +
+        '<div class="pin-lock-icon" aria-hidden="true">' +
+          '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+            '<rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" stroke-width="2"/>' +
+            '<path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' +
+            '<circle cx="12" cy="16" r="1.5" fill="currentColor"/>' +
+          '</svg>' +
+        '</div>' +
         '<div class="pin-title">ورود با PIN</div>' +
         '<div class="pin-sub">کد شش‌رقمی را وارد کنید</div>' +
         '<div class="pin-cells-wrap">' +
@@ -232,7 +238,7 @@
         '</div>' +
         '<div class="pin-err" id="pin-lock-err"></div>' +
         '<button type="button" class="pin-btn" id="pin-lock-submit" disabled>ورود</button>' +
-        '<div class="pin-hint">پس از وارد کردن ۶ رقم، به‌صورت خودکار وارد می‌شوید</div>' +
+        '<div class="pin-powered">powered by bagheri crm</div>' +
       '</div>';
 
     var input = document.getElementById('pin-lock-input');

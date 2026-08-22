@@ -1854,6 +1854,13 @@ function openInvoiceForm(cid, editInv){
         btn.disabled = false;
         return;
       }
+      // FIX (audit M-1): reject negative amounts in the invoice-attached payment
+      // fields, same as row qty/price/discount above. Zero/positive unaffected.
+      if(cashPaid<0 || cardPaid<0 || transferPaid<0 || checkAmount<0){
+        alert('مبلغ دریافتی (نقد/کارت/انتقال/چک) نمی‌تواند منفی باشد.');
+        btn.disabled = false;
+        return;
+      }
 
       const items = rows.map(r=>{
         const prod = data.products.find(p=>p.id===r.productId);

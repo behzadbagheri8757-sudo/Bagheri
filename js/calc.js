@@ -77,6 +77,19 @@ function invoiceEffectivePaid(inv){
     pool += (c.amount||0);
   });
 
+  // FIX (audit Patch 3): openingBalance predates every invoice, so an unlinked
+  // payment must settle it first — same "oldest debt first" order customerTotals()
+  // already uses in its balance formula (openingBalance + invTotal − payTotal − checkTotal).
+  // Without this, a payment that actually covers pre-existing opening debt gets
+  // mis-attributed to the customer's newest/only invoice, showing it as Partial/Paid
+  // even though that invoice itself received nothing. Display-only: does not change
+  // customerTotals(), data.payments, data.checks, or any stored field.
+  const custForOpening = data.customers.find(x=>x.id===cid);
+  const openingBalance = custForOpening ? (custForOpening.openingBalance||0) : 0;
+  if(openingBalance > 0){
+    pool -= Math.min(openingBalance, pool);
+  }
+
   let covered = onRec;
   for(const i of invs){
     const base = invoiceOnRecordPaid(i);
@@ -105,11 +118,25 @@ function customerProfit(cid){
   customerPayments(cid).filter(p=>p.method==='return').forEach(p=>{
     (p.returnItems||[]).forEach(ri=>{
       if(!(ri.qty>0)) return;
-      const sold = customerInvoices(cid).flatMap(inv=>inv.items.filter(it=>it.productId===ri.productId));
-      const lastSold = sold.length ? sold[sold.length-1] : null;
       const prod = data.products.find(x=>x.id===ri.productId);
-      const buy = (lastSold && lastSold.buyPrice!==undefined) ? (lastSold.buyPrice||0) : (prod ? (prod.buy||0) : 0);
-      const sell = (ri.price>0) ? ri.price : (lastSold ? (lastSold.price||0) : 0);
+      // FIX (audit H-1): cost basis must come from the actual invoice this return is
+      // linked to (payment.invoiceId) — not "last sold anywhere" — so it matches the
+      // FIFO cost stock.js already computed for this exact return. Falls back to the
+      // previous "last sold" behavior only for legacy/account-only returns with no
+      // linked invoice (payment.invoiceId missing), so old data keeps working.
+      let sourceItem = null;
+      if(p.invoiceId){
+        const srcInv = data.invoices.find(i=>i.id===p.invoiceId);
+        if(srcInv){
+          sourceItem = (srcInv.items||[]).find(it=>it.productId===ri.productId) || null;
+        }
+      }
+      if(!sourceItem){
+        const sold = customerInvoices(cid).flatMap(inv=>inv.items.filter(it=>it.productId===ri.productId));
+        sourceItem = sold.length ? sold[sold.length-1] : null;
+      }
+      const buy = (sourceItem && sourceItem.buyPrice!==undefined) ? (sourceItem.buyPrice||0) : (prod ? (prod.buy||0) : 0);
+      const sell = (ri.price>0) ? ri.price : (sourceItem ? (sourceItem.price||0) : 0);
       s -= (sell - buy) * ri.qty;
     });
   });
